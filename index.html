@@ -888,7 +888,7 @@
         </div>
         <div class="modal-footer bg-light">
           <button class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-warning px-4 fw-bold" onclick="submitUser()">Save User</button>
+          <button class="btn btn-warning px-4 fw-bold" onclick="submitUser(this)">Save User</button>
         </div>
       </div>
     </div>
@@ -940,7 +940,7 @@
         </div>
         <div class="modal-footer bg-light">
           <button class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-warning px-4 fw-bold" onclick="submitBankAccount()">Save Account</button>
+          <button class="btn btn-warning px-4 fw-bold" onclick="submitBankAccount(this)">Save Account</button>
         </div>
       </div>
     </div>
@@ -999,7 +999,7 @@
         </div>
         <div class="modal-footer bg-light">
           <button class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-warning px-4 fw-bold" onclick="submitOrnament()">Save Ornament</button>
+          <button class="btn btn-warning px-4 fw-bold" onclick="submitOrnament(this)">Save Ornament</button>
         </div>
       </div>
     </div>
@@ -1064,7 +1064,7 @@
         </div>
         <div class="modal-footer bg-light">
           <button class="btn btn-secondary px-4" data-bs-dismiss="modal">Cancel</button>
-          <button class="btn btn-warning px-4 fw-bold" onclick="submitLoan()">Save Loan</button>
+          <button class="btn btn-warning px-4 fw-bold" onclick="submitLoan(this)">Save Loan</button>
         </div>
       </div>
     </div>
@@ -1196,12 +1196,25 @@
       new bootstrap.Modal(document.getElementById('detailViewModal')).show();
     }
 
+    // --- UI BUTTON LOADER ---
+    function setButtonLoading(btn, isLoading) {
+      if (!btn) return;
+      if (isLoading) {
+        btn.dataset.originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> Saving...`;
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = btn.dataset.originalText;
+      }
+    }
+
     // --- SERVER COMMUNICATION ---
-    function gsr(fnName, args = [], onSuccess = () => { }, onError = null) {
-      showSpinner();
+    function gsr(fnName, args = [], onSuccess = () => { }, onError = null, silent = false) {
+      if (!silent) showSpinner();
       google.script.run
         .withSuccessHandler(res => {
-          hideSpinner();
+          if (!silent) hideSpinner();
           if (res.success) {
             onSuccess(res);
           } else {
@@ -1210,12 +1223,11 @@
           }
         })
         .withFailureHandler(err => {
-          hideSpinner();
+          if (!silent) hideSpinner();
           showToast(err.message || String(err), 'error');
           if (onError) onError(err);
         })[fnName](...args);
     }
-
     // --- GENERIC HELPERS ---
     function fmt(n) { return (parseFloat(n) || 0).toLocaleString('en-IN'); }
     function fmtDate(val) {
@@ -1333,35 +1345,6 @@
       modal.show();
     }
 
-    async function submitUser() {
-      const id = document.getElementById('editUserId').value;
-      const fullName = document.getElementById('userFullName').value.trim();
-      if (!fullName) { showToast('Full Name is required.', 'error'); return; }
-
-      const filesPayload = await getFilesPayload('userCustomerPhoto');
-
-      const userData = {
-        FullName: fullName, FatherHusbandName: document.getElementById('userFatherHusbandName').value,
-        CustomerCode: document.getElementById('userCustomerCode').value, MobileNumber: document.getElementById('userMobileNumber').value,
-        AlternateMobileNumber: document.getElementById('userAlternateMobileNumber').value, Email: document.getElementById('userEmail').value,
-        DateOfBirth: document.getElementById('userDateOfBirth').value, Gender: document.getElementById('userGender').value,
-        Occupation: document.getElementById('userOccupation').value, AadhaarNumber: document.getElementById('userAadhaarNumber').value,
-        PANNumber: document.getElementById('userPANNumber').value, AddressLine1: document.getElementById('userAddressLine1').value,
-        AddressLine2: document.getElementById('userAddressLine2').value, City: document.getElementById('userCity').value,
-        State: document.getElementById('userState').value, Pincode: document.getElementById('userPincode').value,
-        Status: document.getElementById('userStatus').value, files: filesPayload
-      };
-
-      const fn = id ? 'updateUser' : 'addUser';
-      const args = id ? [id, userData] : [userData];
-
-      gsr(fn, args, () => {
-        showToast(`User ${id ? 'updated' : 'added'} successfully.`);
-        bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
-        loadUsers();
-      });
-    }
-
     function deleteUser(userId) {
       if (!confirm(`Are you sure you want to delete user ${userId}?`)) return;
       gsr('deleteUser', [userId], () => { showToast('User deleted.'); loadUsers(); });
@@ -1443,31 +1426,6 @@
       modal.show();
     }
 
-    async function submitBankAccount() {
-      const id = document.getElementById('editBankAccountId').value;
-      const holderName = document.getElementById('baAccountHolderName').value.trim();
-      if (!holderName) { showToast('Account Holder Name is required.', 'error'); return; }
-
-      const filesPayload = await getFilesPayload('baPassbookImage');
-      const accountData = {
-        UserId: document.getElementById('baUserId').value, AccountHolderName: holderName,
-        AccountNumber: document.getElementById('baAccountNumber').value, BankName: document.getElementById('baBankName').value,
-        BranchName: document.getElementById('baBranchName').value, IFSCCode: document.getElementById('baIFSCCode').value,
-        AccountType: document.getElementById('baAccountType').value, UPI_ID: document.getElementById('baUPI_ID').value,
-        Status: document.getElementById('baStatus').value, files: filesPayload,
-        MaxLoanAmount: document.getElementById('baMaxLoanAmount').value, UtilizedLoanAmount: document.getElementById('baUtilizedLoanAmount').value
-      };
-
-      const fn = id ? 'updateBankAccount' : 'addBankAccount';
-      const args = id ? [id, accountData] : [accountData];
-
-      gsr(fn, args, () => {
-        showToast(`Bank account ${id ? 'updated' : 'added'} successfully.`);
-        bootstrap.Modal.getInstance(document.getElementById('bankAccountModal')).hide();
-        loadBankAccounts();
-      });
-    }
-
     function deleteBankAccount(accountId) {
       if (!confirm(`Are you sure you want to delete bank account ${accountId}?`)) return;
       gsr('deleteBankAccount', [accountId], () => { showToast('Bank account deleted.'); loadBankAccounts(); });
@@ -1544,32 +1502,6 @@
         document.getElementById('ornModalTitle').textContent = 'Add Ornament';
       }
       modal.show();
-    }
-
-    async function submitOrnament() {
-      const id = document.getElementById('editOrnamentId').value;
-      const name = document.getElementById('ornName').value.trim();
-      if (!name) { showToast('Ornament Name is required.', 'error'); return; }
-
-      const filesPayload = await getFilesPayload('ornImages');
-      const ornamentData = {
-        UserId: document.getElementById('ornUserId').value, OrnamentName: name, OrnamentType: document.getElementById('ornType').value,
-        OrnamentCategory: document.getElementById('ornCategory').value, Description: document.getElementById('ornDescription').value,
-        GrossWeight: document.getElementById('ornGrossWeight').value, NetWeight: document.getElementById('ornNetWeight').value,
-        StoneWeight: document.getElementById('ornStoneWeight').value, Purity: document.getElementById('ornPurity').value,
-        HallmarkNumber: document.getElementById('ornHallmarkNumber').value, Quantity: document.getElementById('ornQuantity').value,
-        EstimatedValue: document.getElementById('ornEstimatedValue').value, MarketValue: document.getElementById('ornMarketValue').value,
-        Remarks: document.getElementById('ornRemarks').value, files: filesPayload
-      };
-
-      const fn = id ? 'updateOrnament' : 'addOrnament';
-      const args = id ? [id, ornamentData] : [ornamentData];
-
-      gsr(fn, args, () => {
-        showToast(`Ornament ${id ? 'updated' : 'added'} successfully.`);
-        bootstrap.Modal.getInstance(document.getElementById('ornamentModal')).hide();
-        loadOrnaments();
-      });
     }
 
     function deleteOrnament(ornamentId) {
@@ -1753,44 +1685,6 @@
       });
     }
 
-    async function submitLoan() {
-      const id = document.getElementById('editLoanId').value;
-      if (id) { showToast('Editing loans is not supported from this form.', 'error'); return; }
-
-      const selectedOrnaments = Array.from(document.querySelectorAll('#availableOrnamentsForLoan input:checked')).map(el => el.value);
-      if (selectedOrnaments.length === 0) { showToast('You must select at least one ornament to pledge.', 'error'); return; }
-
-      const bankAccountId = document.getElementById('loanBankAccountId').value;
-      const selectedAccount = allBankAccounts.find(acc => acc.BankAccountId === bankAccountId);
-      const loanAmount = parseFloat(document.getElementById('loanAmount').value) || 0;
-      const availableAmount = (selectedAccount.MaxLoanAmount || 0) - (selectedAccount.UtilizedLoanAmount || 0);
-      if (loanAmount > availableAmount) {
-        showToast(`Loan amount of ₹${fmt(loanAmount)} exceeds the available limit of ₹${fmt(availableAmount)} for this account.`, 'error');
-        return;
-      }
-
-      const loanData = {
-        UserId: document.getElementById('loanUserId').value, BankAccountId: document.getElementById('loanBankAccountId').value,
-        LoanNumber: document.getElementById('loanNumber').value, LoanDate: document.getElementById('loanDate').value,
-        LoanAmount: document.getElementById('loanAmount').value, InterestRate: document.getElementById('loanInterestRate').value,
-        InterestType: document.getElementById('loanInterestType').value, LoanPeriod: document.getElementById('loanPeriod').value,
-        ProcessingFee: document.getElementById('loanProcessingFee').value, DocumentCharge: document.getElementById('loanDocumentCharge').value,
-        InsuranceCharge: document.getElementById('loanInsuranceCharge').value, TotalCharges: document.getElementById('loanTotalCharges').value,
-        NetDisbursementAmount: document.getElementById('loanNetDisbursementAmount').value, DueDate: document.getElementById('loanDueDate').value,
-        Remarks: document.getElementById('loanRemarks').value, ornamentIds: selectedOrnaments
-      };
-
-      if (!loanData.UserId || !loanData.BankAccountId || !loanData.LoanNumber || !loanData.LoanDate || !loanData.DueDate || !loanData.LoanAmount) {
-        showToast('Please fill all required (*) fields.', 'error'); return;
-      }
-
-      gsr('addLoan', [loanData], () => {
-        showToast('Loan added successfully.');
-        bootstrap.Modal.getInstance(document.getElementById('loanModal')).hide();
-        loadLoans(); loadOrnaments();
-      });
-    }
-
     function confirmCloseAndRelease(loanId, customerName) {
       const remarks = prompt(`Enter closure remarks for ${customerName}'s loan (${loanId}):`, "");
       if (remarks === null) return;
@@ -1832,6 +1726,157 @@
         const terms = row.dataset.searchTerms;
         row.style.display = terms.includes(query) ? '' : 'none';
       });
+    }
+
+
+    // Submit functions
+
+    async function submitUser(btn) {
+      const id = document.getElementById('editUserId').value;
+      const fullName = document.getElementById('userFullName').value.trim();
+      if (!fullName) { showToast('Full Name is required.', 'error'); return; }
+
+      setButtonLoading(btn, true); // Trigger spinner immediately
+
+      try {
+        const filesPayload = await getFilesPayload('userCustomerPhoto');
+
+        const userData = {
+          FullName: fullName, FatherHusbandName: document.getElementById('userFatherHusbandName').value,
+          CustomerCode: document.getElementById('userCustomerCode').value, MobileNumber: document.getElementById('userMobileNumber').value,
+          AlternateMobileNumber: document.getElementById('userAlternateMobileNumber').value, Email: document.getElementById('userEmail').value,
+          DateOfBirth: document.getElementById('userDateOfBirth').value, Gender: document.getElementById('userGender').value,
+          Occupation: document.getElementById('userOccupation').value, AadhaarNumber: document.getElementById('userAadhaarNumber').value,
+          PANNumber: document.getElementById('userPANNumber').value, AddressLine1: document.getElementById('userAddressLine1').value,
+          AddressLine2: document.getElementById('userAddressLine2').value, City: document.getElementById('userCity').value,
+          State: document.getElementById('userState').value, Pincode: document.getElementById('userPincode').value,
+          Status: document.getElementById('userStatus').value, files: filesPayload
+        };
+
+        const fn = id ? 'updateUser' : 'addUser';
+        const args = id ? [id, userData] : [userData];
+
+        // Notice the 'true' at the end to make the server call silent
+        gsr(fn, args, () => {
+          showToast(`User ${id ? 'updated' : 'added'} successfully.`);
+          bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
+          loadUsers();
+          setButtonLoading(btn, false);
+        }, () => { setButtonLoading(btn, false); }, true);
+      } catch (err) {
+        showToast('Error processing files.', 'error');
+        setButtonLoading(btn, false);
+      }
+    }
+
+    async function submitBankAccount(btn) {
+      const id = document.getElementById('editBankAccountId').value;
+      const holderName = document.getElementById('baAccountHolderName').value.trim();
+      if (!holderName) { showToast('Account Holder Name is required.', 'error'); return; }
+
+      setButtonLoading(btn, true);
+
+      try {
+        const filesPayload = await getFilesPayload('baPassbookImage');
+        const accountData = {
+          UserId: document.getElementById('baUserId').value, AccountHolderName: holderName,
+          AccountNumber: document.getElementById('baAccountNumber').value, BankName: document.getElementById('baBankName').value,
+          BranchName: document.getElementById('baBranchName').value, IFSCCode: document.getElementById('baIFSCCode').value,
+          AccountType: document.getElementById('baAccountType').value, UPI_ID: document.getElementById('baUPI_ID').value,
+          Status: document.getElementById('baStatus').value, files: filesPayload,
+          MaxLoanAmount: document.getElementById('baMaxLoanAmount').value, UtilizedLoanAmount: document.getElementById('baUtilizedLoanAmount').value
+        };
+
+        const fn = id ? 'updateBankAccount' : 'addBankAccount';
+        const args = id ? [id, accountData] : [accountData];
+
+        gsr(fn, args, () => {
+          showToast(`Bank account ${id ? 'updated' : 'added'} successfully.`);
+          bootstrap.Modal.getInstance(document.getElementById('bankAccountModal')).hide();
+          loadBankAccounts();
+          setButtonLoading(btn, false);
+        }, () => { setButtonLoading(btn, false); }, true);
+      } catch (err) {
+        showToast('Error processing files.', 'error');
+        setButtonLoading(btn, false);
+      }
+    }
+
+    async function submitOrnament(btn) {
+      const id = document.getElementById('editOrnamentId').value;
+      const name = document.getElementById('ornName').value.trim();
+      if (!name) { showToast('Ornament Name is required.', 'error'); return; }
+
+      setButtonLoading(btn, true);
+
+      try {
+        const filesPayload = await getFilesPayload('ornImages');
+        const ornamentData = {
+          UserId: document.getElementById('ornUserId').value, OrnamentName: name, OrnamentType: document.getElementById('ornType').value,
+          OrnamentCategory: document.getElementById('ornCategory').value, Description: document.getElementById('ornDescription').value,
+          GrossWeight: document.getElementById('ornGrossWeight').value, NetWeight: document.getElementById('ornNetWeight').value,
+          StoneWeight: document.getElementById('ornStoneWeight').value, Purity: document.getElementById('ornPurity').value,
+          HallmarkNumber: document.getElementById('ornHallmarkNumber').value, Quantity: document.getElementById('ornQuantity').value,
+          EstimatedValue: document.getElementById('ornEstimatedValue').value, MarketValue: document.getElementById('ornMarketValue').value,
+          Remarks: document.getElementById('ornRemarks').value, files: filesPayload
+        };
+
+        const fn = id ? 'updateOrnament' : 'addOrnament';
+        const args = id ? [id, ornamentData] : [ornamentData];
+
+        gsr(fn, args, () => {
+          showToast(`Ornament ${id ? 'updated' : 'added'} successfully.`);
+          bootstrap.Modal.getInstance(document.getElementById('ornamentModal')).hide();
+          loadOrnaments();
+          setButtonLoading(btn, false);
+        }, () => { setButtonLoading(btn, false); }, true);
+      } catch (err) {
+        showToast('Error processing files.', 'error');
+        setButtonLoading(btn, false);
+      }
+    }
+
+    async function submitLoan(btn) {
+      const id = document.getElementById('editLoanId').value;
+      if (id) { showToast('Editing loans is not supported from this form.', 'error'); return; }
+
+      const selectedOrnaments = Array.from(document.querySelectorAll('#availableOrnamentsForLoan input:checked')).map(el => el.value);
+      if (selectedOrnaments.length === 0) { showToast('You must select at least one ornament to pledge.', 'error'); return; }
+
+      const bankAccountId = document.getElementById('loanBankAccountId').value;
+      const selectedAccount = allBankAccounts.find(acc => acc.BankAccountId === bankAccountId);
+      const loanAmount = parseFloat(document.getElementById('loanAmount').value) || 0;
+      const availableAmount = (selectedAccount.MaxLoanAmount || 0) - (selectedAccount.UtilizedLoanAmount || 0);
+      if (loanAmount > availableAmount) {
+        showToast(`Loan amount of ₹${fmt(loanAmount)} exceeds the available limit of ₹${fmt(availableAmount)} for this account.`, 'error');
+        return;
+      }
+
+      setButtonLoading(btn, true);
+
+      const loanData = {
+        UserId: document.getElementById('loanUserId').value, BankAccountId: document.getElementById('loanBankAccountId').value,
+        LoanNumber: document.getElementById('loanNumber').value, LoanDate: document.getElementById('loanDate').value,
+        LoanAmount: document.getElementById('loanAmount').value, InterestRate: document.getElementById('loanInterestRate').value,
+        InterestType: document.getElementById('loanInterestType').value, LoanPeriod: document.getElementById('loanPeriod').value,
+        ProcessingFee: document.getElementById('loanProcessingFee').value, DocumentCharge: document.getElementById('loanDocumentCharge').value,
+        InsuranceCharge: document.getElementById('loanInsuranceCharge').value, TotalCharges: document.getElementById('loanTotalCharges').value,
+        NetDisbursementAmount: document.getElementById('loanNetDisbursementAmount').value, DueDate: document.getElementById('loanDueDate').value,
+        Remarks: document.getElementById('loanRemarks').value, ornamentIds: selectedOrnaments
+      };
+
+      if (!loanData.UserId || !loanData.BankAccountId || !loanData.LoanNumber || !loanData.LoanDate || !loanData.DueDate || !loanData.LoanAmount) {
+        showToast('Please fill all required (*) fields.', 'error');
+        setButtonLoading(btn, false);
+        return;
+      }
+
+      gsr('addLoan', [loanData], () => {
+        showToast('Loan added successfully.');
+        bootstrap.Modal.getInstance(document.getElementById('loanModal')).hide();
+        loadLoans(); loadOrnaments();
+        setButtonLoading(btn, false);
+      }, () => { setButtonLoading(btn, false); }, true);
     }
   </script>
 </body>
