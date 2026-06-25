@@ -564,12 +564,13 @@
   <div id="appContainer">
 
     <!-- SIDEBAR -->
-    <div id="sidebar">
+    <div id="sidebar" class="d-flex flex-column">
       <div class="brand">
         <span class="icon">🪙</span>
         <span class="text">Gold Loan</span>
       </div>
-      <nav class="nav flex-column mt-2">
+
+      <nav class="nav flex-column mt-2 flex-grow-1 mb-4">
         <a class="nav-link active" onclick="showSection('dashboard')">
           <span class="icon">🏠</span><span class="text">Dashboard</span>
         </a>
@@ -587,6 +588,11 @@
         </a>
         <a class="nav-link" onclick="showSection('closure')">
           <span class="icon">🔒</span><span class="text">Loan Closure</span>
+        </a>
+
+        <a class="nav-link text-danger mt-auto border-top pt-3" onclick="handleLogout()"
+          style="border-color: rgba(255,255,255,0.05) !important;">
+          <span class="icon">🚪</span><span class="text fw-bold">Logout</span>
         </a>
       </nav>
     </div>
@@ -1094,12 +1100,20 @@
     // --- INITIALIZATION ---
     window.addEventListener('DOMContentLoaded', () => {
       setToday('loanDate');
-      // Adding listener for Enter key on password input
+
+      // 1. Check if user is already logged in (Persist on refresh)
+      const activeSession = sessionStorage.getItem('goldLoanAdmin');
+      if (activeSession) {
+        document.getElementById('loginScreen').style.display = 'none';
+        document.getElementById('appContainer').style.display = 'block';
+        initializeApp();
+      }
+
+      // 2. Adding listener for Enter key on password input
       document.getElementById('loginPassword').addEventListener('keypress', function (e) {
         if (e.key === 'Enter') handleLogin();
       });
     });
-
     // --- AUTHENTICATION ---
     function handleLogin() {
       const user = document.getElementById('loginUsername').value.trim();
@@ -1121,6 +1135,10 @@
       google.script.run
         .withSuccessHandler(res => {
           if (res.success) {
+
+            // NEW: Save the login state to browser session memory
+            sessionStorage.setItem('goldLoanAdmin', res.data.username);
+
             const loginScreen = document.getElementById('loginScreen');
             loginScreen.classList.add('fade-out');
 
@@ -1728,7 +1746,25 @@
       });
     }
 
+    // --- LOGOUT LOGIC ---
+    function handleLogout() {
+      // 1. Clear the session memory
+      sessionStorage.removeItem('goldLoanAdmin');
 
+      // 2. Reset the Login UI
+      const loginScreen = document.getElementById('loginScreen');
+      loginScreen.classList.remove('fade-out');
+      loginScreen.style.display = 'flex';
+
+      document.getElementById('loginUsername').value = '';
+      document.getElementById('loginPassword').value = '';
+
+      // 3. Hide the main app and clear sidebar toggle (if on mobile)
+      document.getElementById('appContainer').style.display = 'none';
+      closeSidebar();
+
+      showToast('Logged out successfully.');
+    }
     // Submit functions
 
     async function submitUser(btn) {
