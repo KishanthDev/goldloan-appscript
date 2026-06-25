@@ -1,6 +1,7 @@
 const SPREADSHEET_ID =
   SpreadsheetApp.getActiveSpreadsheet().getId();
 const SHEET_HEADERS = {
+  Admins: ["AdminId", "Username", "Password", "Role", "Status"], // NEW: Admin Sheet
   Users: ["UserId", "CustomerCode", "FullName", "FatherHusbandName", "MobileNumber", "AlternateMobileNumber", "Email", "DateOfBirth", "Gender", "AadhaarNumber", "PANNumber", "AddressLine1", "AddressLine2", "City", "State", "Pincode", "Occupation", "CustomerPhoto", "Status", "CreatedDate", "UpdatedDate"],
   BankAccounts: ["BankAccountId", "UserId", "AccountHolderName", "AccountNumber", "BankName", "BranchName", "IFSCCode", "AccountType", "UPI_ID", "PassbookImage", "Status", "CreatedDate", "UpdatedDate", "MaxLoanAmount", "UtilizedLoanAmount"],
   Ornaments: ["OrnamentId", "UserId", "OrnamentName", "OrnamentType", "OrnamentCategory", "Description", "GrossWeight", "NetWeight", "StoneWeight", "Purity", "HallmarkNumber", "Quantity", "EstimatedValue", "MarketValue", "OrnamentImages", "Remarks", "Status", "ReleaseDate", "ReleasedLoanId"],
@@ -16,18 +17,25 @@ function setupSheets() {
   try {
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     Object.entries(SHEET_HEADERS).forEach(([name, headers]) => {
-      // Check if sheet exists, if not create it
       let sheet = ss.getSheetByName(name);
       if (!sheet) {
         sheet = ss.insertSheet(name);
       }
-      // Check if headers are present, if not, add them
-      const firstRow = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+
+      const firstRowRange = sheet.getRange(1, 1, 1, headers.length);
+      const firstRow = firstRowRange.getValues()[0];
       const headersMatch = firstRow.every((val, i) => val === headers[i]);
+
       if (!headersMatch) {
-        sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
-        sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#4a90e2").setFontColor("#ffffff");
+        firstRowRange.setValues([headers]);
+        firstRowRange.setFontWeight("bold").setBackground("#4a90e2").setFontColor("#ffffff");
         sheet.setFrozenRows(1);
+
+        // NEW: Seed default admin credentials if setting up for the first time
+        if (name === "Admins") {
+          // Default Username: admin, Password: password123
+          sheet.appendRow(["ADM001", "admin", "password123", "SuperAdmin", "Active"]);
+        }
       }
     });
     return { success: true, data: "Sheets initialized successfully" };
@@ -36,10 +44,28 @@ function setupSheets() {
   }
 }
 
+// ─── AUTHENTICATION ───
+
+function authenticateAdmin(username, password) {
+  try {
+    const admins = getSheetData("Admins").filter(a => a.Status === "Active");
+    const admin = admins.find(a => String(a.Username) === String(username) && String(a.Password) === String(password));
+
+    if (admin) {
+      return { success: true, data: { username: admin.Username, role: admin.Role } };
+    } else {
+      return { success: false, error: "Invalid username or password." };
+    }
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
 function doGet(e) {
   return HtmlService.createHtmlOutputFromFile("index")
     .setTitle("Gold Loan Tracker")
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
 }
 
 // ─── GENERIC CRUD HELPERS ───
@@ -48,20 +74,20 @@ function getSheetData(sheetName) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return [];
-  
+
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return [];
-  
+
   const headers = data[0];
-  
+
   return data.slice(1).map(row => {
     const obj = {};
-    headers.forEach((h, i) => { 
+    headers.forEach((h, i) => {
       let cellValue = row[i];
       if (cellValue instanceof Date) {
-        cellValue = cellValue.toISOString(); 
+        cellValue = cellValue.toISOString();
       }
-      obj[h] = cellValue; 
+      obj[h] = cellValue;
     });
     return obj;
   });
@@ -309,14 +335,14 @@ function addOrnament(ornamentData) {
 function updateOrnament(ornamentId, ornamentData) {
   try {
     let newImageUrls = processDriveFiles(ornamentData.files, "Ornament_Images");
-    
+
     const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
     const sheet = ss.getSheetByName("Ornaments");
     const data = sheet.getDataRange().getValues();
     const headers = data[0];
     const idColIndex = headers.indexOf("OrnamentId");
     const photoColIndex = headers.indexOf("OrnamentImages");
-    
+
     let combinedUrls = "";
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][idColIndex]) === String(ornamentId)) {
@@ -329,7 +355,7 @@ function updateOrnament(ornamentId, ornamentData) {
         break;
       }
     }
-    
+
     delete ornamentData.files;
     ornamentData.OrnamentImages = combinedUrls;
 
@@ -348,7 +374,7 @@ function deleteOrnamentImage(ornamentId, imageUrlToRemove) {
     const headers = data[0];
     const idColIndex = headers.indexOf("OrnamentId");
     const photoColIndex = headers.indexOf("OrnamentImages");
-    
+
     for (let i = 1; i < data.length; i++) {
       if (String(data[i][idColIndex]) === String(ornamentId)) {
         let currentUrls = data[i][photoColIndex] ? String(data[i][photoColIndex]).split(" | ") : [];
@@ -362,7 +388,7 @@ function deleteOrnamentImage(ornamentId, imageUrlToRemove) {
     if (fileIdMatch && fileIdMatch[1]) {
       DriveApp.getFileById(fileIdMatch[1]).setTrashed(true);
     }
-    
+
     return { success: true };
   } catch (error) {
     return { success: false, error: error.toString() };
@@ -510,8 +536,8 @@ function closeAndReleaseLoan(loanId, closureRemarks) {
     const loanToClose = getSheetData("Loans").find(l => l.LoanId === loanId);
 
     const currentDate = new Date().toISOString();
-    updateRow("Loans", "LoanId", loanId, { 
-      LoanStatus: "Closed", 
+    updateRow("Loans", "LoanId", loanId, {
+      LoanStatus: "Closed",
       UpdatedDate: currentDate,
       ClosedDate: currentDate,
       ClosureRemarks: closureRemarks
@@ -524,39 +550,39 @@ function closeAndReleaseLoan(loanId, closureRemarks) {
     mappings.forEach(m => {
       // Update the mapping table
       updateRow("LoanOrnaments", "MappingId", m.MappingId, { Status: "Released" });
-      
+
       // Update the ornament itself
-      updateRow("Ornaments", "OrnamentId", m.OrnamentId, { 
+      updateRow("Ornaments", "OrnamentId", m.OrnamentId, {
         Status: "Released",
         ReleaseDate: currentDate,
         ReleasedLoanId: loanId
       });
     });
     // Reduce utilized loan amount in bank account
-if (loanToClose && loanToClose.BankAccountId) {
-  const bankAccount = getSheetData("BankAccounts")
-    .find(acc => acc.BankAccountId === loanToClose.BankAccountId);
+    if (loanToClose && loanToClose.BankAccountId) {
+      const bankAccount = getSheetData("BankAccounts")
+        .find(acc => acc.BankAccountId === loanToClose.BankAccountId);
 
-  if (bankAccount) {
-    const currentUtilized =
-      parseFloat(bankAccount.UtilizedLoanAmount) || 0;
+      if (bankAccount) {
+        const currentUtilized =
+          parseFloat(bankAccount.UtilizedLoanAmount) || 0;
 
-    const loanAmount =
-      parseFloat(loanToClose.LoanAmount) || 0;
+        const loanAmount =
+          parseFloat(loanToClose.LoanAmount) || 0;
 
-    const newUtilized =
-      Math.max(0, currentUtilized - loanAmount);
+        const newUtilized =
+          Math.max(0, currentUtilized - loanAmount);
 
-    updateRow(
-      "BankAccounts",
-      "BankAccountId",
-      loanToClose.BankAccountId,
-      {
-        UtilizedLoanAmount: newUtilized
+        updateRow(
+          "BankAccounts",
+          "BankAccountId",
+          loanToClose.BankAccountId,
+          {
+            UtilizedLoanAmount: newUtilized
+          }
+        );
       }
-    );
-  }
-}
+    }
     return { success: true, data: "Loan closed and ornaments released successfully" };
   } catch (e) {
     return { success: false, error: e.message };
@@ -657,7 +683,7 @@ function getDashboardData() {
   try {
     const users = getSheetData("Users").filter(u => u.Status === "Active");
     const bankAccounts = getSheetData("BankAccounts").filter(b => b.Status === "Active");
-        const ornaments = getSheetData("Ornaments").filter(o => o.Status !== "Deleted");
+    const ornaments = getSheetData("Ornaments").filter(o => o.Status !== "Deleted");
     const loans = getSheetData("Loans");
     const activeLoans = loans.filter(l => l.LoanStatus === "Active");
     const closedLoans = loans.filter(l => l.LoanStatus === "Closed");
