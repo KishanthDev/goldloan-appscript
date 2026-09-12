@@ -674,8 +674,8 @@ function updateLoan(loanId, loanData) {
         const activeLoans = getSheetData("Loans").filter(l => l.LoanStatus === "Active");
         const otherUtilized = activeLoans
           .filter(l => String(l.LoanId) !== String(loanId) &&
-                       String(l.UserId) === String(targetUserId) &&
-                       String(l.BankAccountId) === String(newBankAccountId))
+            String(l.UserId) === String(targetUserId) &&
+            String(l.BankAccountId) === String(newBankAccountId))
           .reduce((sum, l) => sum + (parseFloat(l.LoanAmount) || 0), 0);
         const available = Math.max(0, maxLoan - otherUtilized);
         if (newLoanAmount > available) {
@@ -1106,7 +1106,7 @@ function parseGoldRatesHtml(html) {
 
     // Extract formatted date from page
     const dateMatch = cleanHtml.match(/id=["']metal-price-date["'][^>]*>([\s\S]*?)<\/span>/i) ||
-                      cleanHtml.match(/<title[^>]*>[\s\S]*?(?:on|for)\s+([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i);
+      cleanHtml.match(/<title[^>]*>[\s\S]*?(?:on|for)\s+([0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i);
     if (dateMatch) {
       rates.displayDate = dateMatch[1].replace(/<[^>]+>/g, "").trim();
     } else {
@@ -1119,7 +1119,7 @@ function parseGoldRatesHtml(html) {
 
       let deltaHtml = "";
       const spanMatch = cellHtml.match(/<span[^>]*class=["'][^"']*gr-(?:change|delta)[^"']*["'][^>]*>([\s\S]*?)<\/span>/i) ||
-                        cellHtml.match(/<span[^>]*>([\s\S]*?)<\/span>/i);
+        cellHtml.match(/<span[^>]*>([\s\S]*?)<\/span>/i);
       if (spanMatch) {
         deltaHtml = spanMatch[0];
       }
@@ -1147,7 +1147,7 @@ function parseGoldRatesHtml(html) {
 
       const deltaText = deltaHtml.replace(/<[^>]+>/g, " ").trim();
       const changeMatch = deltaText.match(/([+-]?)\s*([0-9,]+(?:\.[0-9]+)?)/) ||
-                          cellHtml.match(/\(([+-]?)\s*([0-9,]+(?:\.[0-9]+)?)\)/);
+        cellHtml.match(/\(([+-]?)\s*([0-9,]+(?:\.[0-9]+)?)\)/);
 
       const hasDown = /gr-(?:change|delta)-down|red-span/i.test(deltaHtml || cellHtml) || deltaText.includes("-");
       const hasUp = /gr-(?:change|delta)-up|green-span/i.test(deltaHtml || cellHtml) || deltaText.includes("+");

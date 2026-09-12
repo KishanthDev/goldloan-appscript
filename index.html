@@ -355,100 +355,121 @@
       <main class="flex-1 overflow-y-auto p-4 sm:p-6" id="views-container">
 
         <div id="view-dashboard" class="view-section space-y-6 active">
-          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            <!-- Total Users -->
             <div onclick="navigateTo('users')"
-              class="bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between cursor-pointer hover:shadow-md hover:border-brand-300 dark:hover:border-brand-500/50 transition-all duration-200 hover:-translate-y-0.5 group"
+              class="bg-white dark:bg-dark-card p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between gap-3 cursor-pointer hover:shadow-md hover:border-brand-300 dark:hover:border-brand-500/50 transition-all duration-200 hover:-translate-y-0.5 group overflow-hidden"
               title="Click to view Users">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p
-                  class="text-xs font-bold text-gray-400 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors uppercase tracking-wider">
+                  class="text-xs font-bold text-gray-400 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors uppercase tracking-wider truncate">
                   Total Users</p>
-                <h4 class="text-3xl font-bold text-gray-800 dark:text-white mt-1" id="d-users">—</h4>
+                <h4 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mt-1 truncate" id="d-users">—
+                </h4>
               </div>
               <div
-                class="p-3 bg-brand-50 text-brand-600 dark:bg-brand-900/30 rounded-xl text-2xl group-hover:scale-110 transition-transform">
+                class="p-2.5 sm:p-3 bg-brand-50 text-brand-600 dark:bg-brand-900/30 rounded-xl text-xl sm:text-2xl shrink-0 group-hover:scale-110 transition-transform flex items-center justify-center">
                 👥</div>
             </div>
+
+            <!-- Bank Accounts -->
             <div onclick="navigateTo('bank-accounts')"
-              class="bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between cursor-pointer hover:shadow-md hover:border-green-300 dark:hover:border-green-500/50 transition-all duration-200 hover:-translate-y-0.5 group"
+              class="bg-white dark:bg-dark-card p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between gap-3 cursor-pointer hover:shadow-md hover:border-green-300 dark:hover:border-green-500/50 transition-all duration-200 hover:-translate-y-0.5 group overflow-hidden"
               title="Click to view Bank Accounts">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p
-                  class="text-xs font-bold text-gray-400 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors uppercase tracking-wider">
+                  class="text-xs font-bold text-gray-400 group-hover:text-green-600 dark:group-hover:text-green-400 transition-colors uppercase tracking-wider truncate">
                   Bank Accounts</p>
-                <h4 class="text-3xl font-bold text-gray-800 dark:text-white mt-1" id="d-accounts">—</h4>
+                <h4 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mt-1 truncate" id="d-accounts">—
+                </h4>
               </div>
               <div
-                class="p-3 bg-green-50 text-green-600 dark:bg-green-900/30 rounded-xl text-2xl group-hover:scale-110 transition-transform">
+                class="p-2.5 sm:p-3 bg-green-50 text-green-600 dark:bg-green-900/30 rounded-xl text-xl sm:text-2xl shrink-0 group-hover:scale-110 transition-transform flex items-center justify-center">
                 💳</div>
             </div>
+
+            <!-- Total Ornaments -->
             <div onclick="navigateTo('ornaments')"
-              class="bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between cursor-pointer hover:shadow-md hover:border-purple-300 dark:hover:border-purple-500/50 transition-all duration-200 hover:-translate-y-0.5 group"
+              class="bg-white dark:bg-dark-card p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between gap-3 cursor-pointer hover:shadow-md hover:border-purple-300 dark:hover:border-purple-500/50 transition-all duration-200 hover:-translate-y-0.5 group overflow-hidden"
               title="Click to view all Ornaments">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p
-                  class="text-xs font-bold text-gray-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors uppercase tracking-wider">
+                  class="text-xs font-bold text-gray-400 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors uppercase tracking-wider truncate">
                   Total Ornaments</p>
-                <h4 class="text-3xl font-bold text-gray-800 dark:text-white mt-1" id="d-ornaments">—</h4>
+                <h4 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mt-1 truncate" id="d-ornaments">
+                  —</h4>
               </div>
               <div
-                class="p-3 bg-purple-50 text-purple-600 dark:bg-purple-900/30 rounded-xl text-2xl group-hover:scale-110 transition-transform">
+                class="p-2.5 sm:p-3 bg-purple-50 text-purple-600 dark:bg-purple-900/30 rounded-xl text-xl sm:text-2xl shrink-0 group-hover:scale-110 transition-transform flex items-center justify-center">
                 💍</div>
             </div>
+
+            <!-- Pledged Ornaments -->
             <div onclick="navigateTo('ornaments', 'Pledged')"
-              class="bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between cursor-pointer hover:shadow-md hover:border-amber-300 dark:hover:border-amber-500/50 transition-all duration-200 hover:-translate-y-0.5 group"
+              class="bg-white dark:bg-dark-card p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between gap-3 cursor-pointer hover:shadow-md hover:border-amber-300 dark:hover:border-amber-500/50 transition-all duration-200 hover:-translate-y-0.5 group overflow-hidden"
               title="Click to view Pledged Ornaments">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p
-                  class="text-xs font-bold text-gray-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors uppercase tracking-wider">
+                  class="text-xs font-bold text-gray-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors uppercase tracking-wider truncate">
                   Pledged Ornaments</p>
                 <div class="flex items-baseline gap-2 mt-1">
-                  <h4 class="text-3xl font-bold text-amber-600 dark:text-amber-400" id="d-pledged-grams">—g</h4>
+                  <h4 class="text-2xl sm:text-3xl font-bold text-amber-600 dark:text-amber-400 truncate"
+                    id="d-pledged-grams">—g</h4>
                 </div>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium" id="d-pledged-count">— item(s)
-                  pledged</p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-medium truncate" id="d-pledged-count">—
+                  item(s) pledged</p>
               </div>
               <div
-                class="p-3 bg-amber-50 text-amber-600 dark:bg-amber-900/30 rounded-xl text-2xl group-hover:scale-110 transition-transform">
+                class="p-2.5 sm:p-3 bg-amber-50 text-amber-600 dark:bg-amber-900/30 rounded-xl text-xl sm:text-2xl shrink-0 group-hover:scale-110 transition-transform flex items-center justify-center">
                 ⚖️</div>
             </div>
+
+            <!-- Active Loans -->
             <div onclick="navigateTo('loans', 'Active')"
-              class="bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between cursor-pointer hover:shadow-md hover:border-orange-300 dark:hover:border-orange-500/50 transition-all duration-200 hover:-translate-y-0.5 group"
+              class="bg-white dark:bg-dark-card p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between gap-3 cursor-pointer hover:shadow-md hover:border-orange-300 dark:hover:border-orange-500/50 transition-all duration-200 hover:-translate-y-0.5 group overflow-hidden"
               title="Click to view Active Loans">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p
-                  class="text-xs font-bold text-gray-400 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors uppercase tracking-wider">
+                  class="text-xs font-bold text-gray-400 group-hover:text-orange-600 dark:group-hover:text-orange-400 transition-colors uppercase tracking-wider truncate">
                   Active Loans</p>
-                <h4 class="text-3xl font-bold text-gray-800 dark:text-white mt-1" id="d-active-loans">—</h4>
+                <h4 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mt-1 truncate"
+                  id="d-active-loans">—</h4>
               </div>
               <div
-                class="p-3 bg-orange-50 text-orange-600 dark:bg-orange-900/30 rounded-xl text-2xl group-hover:scale-110 transition-transform">
+                class="p-2.5 sm:p-3 bg-orange-50 text-orange-600 dark:bg-orange-900/30 rounded-xl text-xl sm:text-2xl shrink-0 group-hover:scale-110 transition-transform flex items-center justify-center">
                 🏦</div>
             </div>
+
+            <!-- Closed Loans -->
             <div onclick="navigateTo('loans', 'Closed')"
-              class="bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between cursor-pointer hover:shadow-md hover:border-red-300 dark:hover:border-red-500/50 transition-all duration-200 hover:-translate-y-0.5 group"
+              class="bg-white dark:bg-dark-card p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between gap-3 cursor-pointer hover:shadow-md hover:border-red-300 dark:hover:border-red-500/50 transition-all duration-200 hover:-translate-y-0.5 group overflow-hidden"
               title="Click to view Closed Loans">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p
-                  class="text-xs font-bold text-gray-400 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors uppercase tracking-wider">
+                  class="text-xs font-bold text-gray-400 group-hover:text-red-600 dark:group-hover:text-red-400 transition-colors uppercase tracking-wider truncate">
                   Closed Loans</p>
-                <h4 class="text-3xl font-bold text-gray-800 dark:text-white mt-1" id="d-closed-loans">—</h4>
+                <h4 class="text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mt-1 truncate"
+                  id="d-closed-loans">—</h4>
               </div>
               <div
-                class="p-3 bg-red-50 text-red-600 dark:bg-red-900/30 rounded-xl text-2xl group-hover:scale-110 transition-transform">
+                class="p-2.5 sm:p-3 bg-red-50 text-red-600 dark:bg-red-900/30 rounded-xl text-xl sm:text-2xl shrink-0 group-hover:scale-110 transition-transform flex items-center justify-center">
                 🔒</div>
             </div>
+
+            <!-- Active Loan Value (Responsive & Scalable) -->
             <div onclick="navigateTo('loans', 'Active')"
-              class="bg-white dark:bg-dark-card p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between cursor-pointer hover:shadow-md hover:border-teal-300 dark:hover:border-teal-500/50 transition-all duration-200 hover:-translate-y-0.5 group"
+              class="bg-white dark:bg-dark-card p-4 sm:p-5 rounded-2xl border border-gray-100 dark:border-dark-border shadow-sm flex items-center justify-between gap-3 cursor-pointer hover:shadow-md hover:border-teal-300 dark:hover:border-teal-500/50 transition-all duration-200 hover:-translate-y-0.5 group overflow-hidden"
               title="Click to view Active Loans">
-              <div>
+              <div class="min-w-0 flex-1">
                 <p
-                  class="text-xs font-bold text-gray-400 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors uppercase tracking-wider">
+                  class="text-xs font-bold text-gray-400 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors uppercase tracking-wider truncate">
                   Active Loan Value</p>
-                <h4 class="text-3xl font-bold text-gray-800 dark:text-white mt-1" id="d-loan-amount">—</h4>
+                <h4
+                  class="text-xl sm:text-2xl 2xl:text-3xl font-bold text-gray-800 dark:text-white mt-1 tracking-tight truncate"
+                  id="d-loan-amount" title="Active Loan Value">—</h4>
               </div>
               <div
-                class="p-3 bg-teal-50 text-teal-600 dark:bg-teal-900/30 rounded-xl text-2xl group-hover:scale-110 transition-transform">
+                class="p-2.5 sm:p-3 bg-teal-50 text-teal-600 dark:bg-teal-900/30 rounded-xl text-xl sm:text-2xl shrink-0 group-hover:scale-110 transition-transform flex items-center justify-center">
                 💰</div>
             </div>
           </div>
@@ -1851,6 +1872,13 @@
         }
       }
     };
+    // Expose on window: this is declared with `const`, so top-level scripts never
+    // attach it to `window` automatically. Every `if (window.tablePagination)` guard
+    // elsewhere in this file (initAllTableSorting, reapplyTableSort, sortTable,
+    // navigateTo) relies on this being set — without it those calls silently no-op,
+    // which is why pagination never (re)initializes after an async table load and
+    // only "works" once a control that calls tablePagination.* directly is used.
+    window.tablePagination = tablePagination;
 
     // --- TABLE SORTING ENGINE ---
     const SORT_ICONS = {
@@ -2042,7 +2070,17 @@
         document.getElementById('d-ornaments').textContent = d.totalOrnaments;
         document.getElementById('d-active-loans').textContent = d.activeLoans;
         document.getElementById('d-closed-loans').textContent = d.closedLoans;
-        document.getElementById('d-loan-amount').textContent = '₹' + fmt(d.totalLoanAmount);
+        const loanAmountEl = document.getElementById('d-loan-amount');
+        const formattedLoanAmount = '₹' + fmt(d.totalLoanAmount);
+        loanAmountEl.textContent = formattedLoanAmount;
+        loanAmountEl.title = formattedLoanAmount;
+        if (formattedLoanAmount.length >= 12) {
+          loanAmountEl.className = "text-base sm:text-lg xl:text-xl font-bold text-gray-800 dark:text-white mt-1 tracking-tight truncate";
+        } else if (formattedLoanAmount.length >= 9) {
+          loanAmountEl.className = "text-lg sm:text-xl xl:text-2xl font-bold text-gray-800 dark:text-white mt-1 tracking-tight truncate";
+        } else {
+          loanAmountEl.className = "text-2xl sm:text-3xl font-bold text-gray-800 dark:text-white mt-1 tracking-tight truncate";
+        }
 
         // Update Pledged Ornaments Card
         if (d.pledgedOrnamentsCount !== undefined && d.pledgedGrams !== undefined) {
