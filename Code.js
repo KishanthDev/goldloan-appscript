@@ -4,7 +4,7 @@ const SHEET_HEADERS = {
   Admins: ["AdminId", "Username", "Password", "Role", "Status"], // NEW: Admin Sheet
   Users: ["UserId", "CustomerCode", "FullName", "FatherHusbandName", "MobileNumber", "AlternateMobileNumber", "Email", "DateOfBirth", "Gender", "AadhaarNumber", "PANNumber", "AddressLine1", "AddressLine2", "City", "State", "Pincode", "Occupation", "CustomerPhoto", "Status", "CreatedDate", "UpdatedDate"],
   BankAccounts: ["BankAccountId", "UserId", "AccountHolderName", "AccountNumber", "BankName", "BranchName", "IFSCCode", "AccountType", "UPI_ID", "PassbookImage", "Status", "CreatedDate", "UpdatedDate", "MaxLoanAmount", "UtilizedLoanAmount"],
-  Ornaments: ["OrnamentId", "UserId", "OrnamentName", "OrnamentType", "OrnamentCategory", "Description", "GrossWeight", "NetWeight", "StoneWeight", "Purity", "HallmarkNumber", "Quantity", "EstimatedValue", "MarketValue", "OrnamentImages", "Remarks", "Status", "ReleaseDate", "ReleasedLoanId"],
+  Ornaments: ["OrnamentId", "UserId", "OrnamentName", "OrnamentType", "OrnamentCategory", "Description", "GrossWeight", "NetWeight", "MetalWeight", "StoneWeight", "Purity", "HallmarkNumber", "Quantity", "BuyingPricePerGram", "TotalPrice", "MakerName", "EstimatedValue", "MarketValue", "OrnamentImages", "Remarks", "Status", "ReleaseDate", "ReleasedLoanId"],
   Loans: ["LoanId", "LoanNumber", "UserId", "BankAccountId", "BankName", "LoanDate", "LoanAmount", "InterestRate", "InterestType", "LoanPeriod", "ProcessingFee", "DocumentCharge", "InsuranceCharge", "TotalCharges", "NetDisbursementAmount", "DueDate", "LoanStatus", "Remarks", "CreatedDate", "UpdatedDate", "ClosedDate", "ClosureRemarks"],
   LoanOrnaments: ["MappingId", "LoanId", "OrnamentId", "Status"],
   Payments: ["PaymentId", "LoanId", "PaymentDate", "PaymentType", "PrincipalAmount", "InterestAmount", "PenaltyAmount", "TotalPaidAmount", "PaymentMethod", "TransactionReference", "Remarks", "CreatedDate"],
@@ -147,12 +147,34 @@ function getSheetData(sheetName) {
   });
 }
 
+function ensureSheetHeaders(sheet, sheetName, objectKeys = []) {
+  if (!sheet) return [];
+  const defaultHeaders = SHEET_HEADERS[sheetName] || [];
+  let lastCol = sheet.getLastColumn();
+  let currentHeaders = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String) : [];
+
+  // Filter out system or temporary payload fields like 'files'
+  const validKeys = objectKeys.filter(k => k && k !== "files" && typeof k === "string");
+  const requiredHeaders = [...new Set([...defaultHeaders, ...validKeys])];
+
+  requiredHeaders.forEach(h => {
+    if (h && !currentHeaders.includes(h)) {
+      lastCol++;
+      const cell = sheet.getRange(1, lastCol);
+      cell.setValue(h);
+      cell.setFontWeight("bold").setBackground("#4a90e2").setFontColor("#ffffff");
+      currentHeaders.push(h);
+    }
+  });
+
+  return currentHeaders;
+}
+
 function appendRow(sheetName, rowObject) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return;
-  const lastCol = sheet.getLastColumn();
-  const headers = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : SHEET_HEADERS[sheetName];
+  const headers = ensureSheetHeaders(sheet, sheetName, Object.keys(rowObject || {}));
   const row = headers.map(h => rowObject[h] !== undefined ? rowObject[h] : "");
   sheet.appendRow(row);
 }
@@ -161,9 +183,9 @@ function updateRow(sheetName, idColumn, idValue, updatedObject) {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const sheet = ss.getSheetByName(sheetName);
   if (!sheet) return false;
+  const headers = ensureSheetHeaders(sheet, sheetName, Object.keys(updatedObject || {}));
   const data = sheet.getDataRange().getValues();
   if (data.length <= 1) return false;
-  const headers = data[0];
   const idColIndex = headers.indexOf(idColumn);
   if (idColIndex === -1) return false;
   for (let i = 1; i < data.length; i++) {
@@ -406,6 +428,21 @@ function addOrnament(ornamentData) {
     const ornamentId = generateId("ORN", "Ornaments", "OrnamentId");
     let imageUrls = processDriveFiles(ornamentData.files, "Ornament_Images");
 
+    const grossWeight = parseFloat(ornamentData.GrossWeight) || 0;
+    const stoneWeight = parseFloat(ornamentData.StoneWeight) || 0;
+    let metalWeight = ornamentData.MetalWeight !== undefined && ornamentData.MetalWeight !== "" ? parseFloat(ornamentData.MetalWeight) : null;
+    let netWeight = ornamentData.NetWeight !== undefined && ornamentData.NetWeight !== "" ? parseFloat(ornamentData.NetWeight) : null;
+    if (metalWeight === null && netWeight !== null) metalWeight = netWeight;
+    if (netWeight === null && metalWeight !== null) netWeight = metalWeight;
+    if (metalWeight === null) metalWeight = Math.max(0, grossWeight - stoneWeight);
+    if (netWeight === null) netWeight = metalWeight;
+
+    const buyingPrice = parseFloat(ornamentData.BuyingPricePerGram !== undefined ? ornamentData.BuyingPricePerGram : ornamentData.BuyingPrice) || 0;
+    let totalPrice = parseFloat(ornamentData.TotalPrice) || 0;
+    if (!totalPrice && buyingPrice && metalWeight) {
+      totalPrice = Math.round(metalWeight * buyingPrice);
+    }
+
     const record = {
       OrnamentId: ornamentId,
       UserId: ornamentData.UserId || "",
@@ -413,16 +450,20 @@ function addOrnament(ornamentData) {
       OrnamentType: ornamentData.OrnamentType || "",
       OrnamentCategory: ornamentData.OrnamentCategory || "",
       Description: ornamentData.Description || "",
-      GrossWeight: parseFloat(ornamentData.GrossWeight) || 0,
-      NetWeight: parseFloat(ornamentData.NetWeight) || 0,
-      StoneWeight: parseFloat(ornamentData.StoneWeight) || 0,
+      GrossWeight: grossWeight,
+      NetWeight: netWeight,
+      MetalWeight: metalWeight,
+      StoneWeight: stoneWeight,
       Purity: ornamentData.Purity || "22K",
       HallmarkNumber: ornamentData.HallmarkNumber || "",
       Quantity: parseInt(ornamentData.Quantity) || 1,
-      EstimatedValue: parseFloat(ornamentData.EstimatedValue) || 0,
+      BuyingPricePerGram: buyingPrice,
+      TotalPrice: totalPrice,
+      MakerName: ornamentData.MakerName || "",
+      EstimatedValue: parseFloat(ornamentData.EstimatedValue) || totalPrice || 0,
       MarketValue: parseFloat(ornamentData.MarketValue) || 0,
       OrnamentImages: imageUrls.join(" | "),
-      Status: "Available",
+      Status: ornamentData.Status || "Available",
       Remarks: ornamentData.Remarks || ""
     };
     appendRow("Ornaments", record);
@@ -444,20 +485,46 @@ function updateOrnament(ornamentId, ornamentData) {
     const photoColIndex = headers.indexOf("OrnamentImages");
 
     let combinedUrls = "";
-    for (let i = 1; i < data.length; i++) {
-      if (String(data[i][idColIndex]) === String(ornamentId)) {
-        let existingUrls = data[i][photoColIndex] ? String(data[i][photoColIndex]) : "";
-        if (newImageUrls.length > 0) {
-          combinedUrls = existingUrls ? [existingUrls, ...newImageUrls].join(" | ") : newImageUrls.join(" | ");
-        } else {
-          combinedUrls = existingUrls;
+    if (photoColIndex !== -1) {
+      for (let i = 1; i < data.length; i++) {
+        if (String(data[i][idColIndex]) === String(ornamentId)) {
+          let existingUrls = data[i][photoColIndex] ? String(data[i][photoColIndex]) : "";
+          if (newImageUrls.length > 0) {
+            combinedUrls = existingUrls ? [existingUrls, ...newImageUrls].join(" | ") : newImageUrls.join(" | ");
+          } else {
+            combinedUrls = existingUrls;
+          }
+          break;
         }
-        break;
       }
     }
 
     delete ornamentData.files;
-    ornamentData.OrnamentImages = combinedUrls;
+    if (newImageUrls.length > 0 || combinedUrls) {
+      ornamentData.OrnamentImages = combinedUrls;
+    }
+
+    // Parse and sync numeric fields cleanly
+    if (ornamentData.GrossWeight !== undefined) ornamentData.GrossWeight = parseFloat(ornamentData.GrossWeight) || 0;
+    if (ornamentData.StoneWeight !== undefined) ornamentData.StoneWeight = parseFloat(ornamentData.StoneWeight) || 0;
+
+    if (ornamentData.MetalWeight !== undefined) {
+      ornamentData.MetalWeight = parseFloat(ornamentData.MetalWeight) || 0;
+      ornamentData.NetWeight = ornamentData.MetalWeight;
+    } else if (ornamentData.NetWeight !== undefined) {
+      ornamentData.NetWeight = parseFloat(ornamentData.NetWeight) || 0;
+      ornamentData.MetalWeight = ornamentData.NetWeight;
+    }
+
+    if (ornamentData.BuyingPrice !== undefined && ornamentData.BuyingPricePerGram === undefined) {
+      ornamentData.BuyingPricePerGram = parseFloat(ornamentData.BuyingPrice) || 0;
+    } else if (ornamentData.BuyingPricePerGram !== undefined) {
+      ornamentData.BuyingPricePerGram = parseFloat(ornamentData.BuyingPricePerGram) || 0;
+    }
+
+    if (ornamentData.TotalPrice !== undefined) {
+      ornamentData.TotalPrice = parseFloat(ornamentData.TotalPrice) || 0;
+    }
 
     updateRow("Ornaments", "OrnamentId", ornamentId, ornamentData);
     return { success: true, data: "Ornament updated" };
@@ -946,6 +1013,30 @@ function getDashboardData() {
     const closedLoans = loans.filter(l => l.LoanStatus === "Closed");
     const totalLoanAmount = activeLoans.reduce((sum, l) => sum + (parseFloat(l.LoanAmount) || 0), 0);
 
+    const totalEligibleLoanAmount = bankAccounts.reduce((sum, b) => sum + (parseFloat(b.MaxLoanAmount) || 0), 0);
+    const totalAvailableLoanAmount = bankAccounts.reduce((sum, b) => {
+      const maxL = parseFloat(b.MaxLoanAmount) || 0;
+      const util = calculateUserBankUtilization(b.UserId, b.BankAccountId, activeLoans);
+      return sum + Math.max(0, maxL - util);
+    }, 0);
+
+    // Calculate total gold weight and buying gold value from all ornaments
+    let totalGoldWeight = 0;
+    let totalBuyingGoldValue = 0;
+    ornaments.forEach(o => {
+      const metal = parseFloat(o.MetalWeight);
+      const net = parseFloat(o.NetWeight);
+      const gross = parseFloat(o.GrossWeight) || 0;
+      const stone = parseFloat(o.StoneWeight) || 0;
+      const wt = (!isNaN(metal) && metal > 0) ? metal : ((!isNaN(net) && net > 0) ? net : Math.max(0, gross - stone));
+
+      const rate = parseFloat(o.BuyingPricePerGram !== undefined && o.BuyingPricePerGram !== null && o.BuyingPricePerGram !== "" ? o.BuyingPricePerGram : (o.BuyingPrice || o["Buying price/grm"])) || 0;
+      const buyVal = (rate > 0 && wt > 0) ? (rate * wt) : (parseFloat(o.TotalPrice) || 0);
+
+      totalGoldWeight += wt;
+      totalBuyingGoldValue += buyVal;
+    });
+
     const payments = getSheetData("Payments");
     const recentTransactions = payments.slice(-5).reverse();
 
@@ -960,6 +1051,10 @@ function getDashboardData() {
         activeLoans: activeLoans.length,
         closedLoans: closedLoans.length,
         totalLoanAmount,
+        totalEligibleLoanAmount,
+        totalAvailableLoanAmount,
+        totalGoldWeight,
+        totalBuyingGoldValue,
         recentTransactions
       }
     };
