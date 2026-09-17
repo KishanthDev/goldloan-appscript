@@ -3702,25 +3702,66 @@
           document.getElementById('loanAmount').value = loan.LoanAmount || '';
           document.getElementById('loanInterestRate').value = loan.InterestRate || '';
           document.getElementById('loanInterestType').value = loan.InterestType || 'Simple';
-          document.getElementById('loanPeriod').value = loan.LoanPeriod || '';
+          let periodVal = (loan.LoanPeriod !== undefined && loan.LoanPeriod !== null && loan.LoanPeriod !== '') ? loan.LoanPeriod : '';
+          if (!periodVal && loan.LoanDate && loan.DueDate) {
+            const start = new Date(loan.LoanDate);
+            const end = new Date(loan.DueDate);
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime()) && end > start) {
+              periodVal = Math.max(1, Math.round((end - start) / (1000 * 60 * 60 * 24 * 30.4375)));
+            }
+          }
+          document.getElementById('loanPeriod').value = periodVal;
+
           const grossEl = document.getElementById('loanGrossWeight');
           const netEl = document.getElementById('loanNetWeight');
-          if (grossEl) {
-            grossEl.value = (loan.GrossWeight !== undefined && loan.GrossWeight !== null) ? loan.GrossWeight : '';
-            grossEl.dataset.manual = 'true';
-          }
-          if (netEl) {
-            netEl.value = (loan.NetWeight !== undefined && loan.NetWeight !== null) ? loan.NetWeight : '';
-            netEl.dataset.manual = 'true';
-          }
-          document.getElementById('loanProcessingFee').value = loan.ProcessingFee || '';
-          document.getElementById('loanDocumentCharge').value = loan.DocumentCharge || '';
-          document.getElementById('loanInsuranceCharge').value = loan.InsuranceCharge || '';
-          document.getElementById('loanTotalCharges').value = loan.TotalCharges || '';
-          document.getElementById('loanNetDisbursementAmount').value = loan.NetDisbursementAmount || '';
-          document.getElementById('loanRemarks').value = loan.Remarks || '';
 
-          calculateLoanCharges();
+          const pledgedGross = pledgedOrnaments.reduce((s, o) => s + (parseFloat(o.GrossWeight) || 0), 0);
+          const pledgedNet = pledgedOrnaments.reduce((s, o) => {
+            const nw = (o.MetalWeight !== undefined && o.MetalWeight !== '' && o.MetalWeight !== null) ? o.MetalWeight : (o.NetWeight || 0);
+            return s + (parseFloat(nw) || 0);
+          }, 0);
+
+          const storedGross = (loan.GrossWeight !== undefined && loan.GrossWeight !== null && loan.GrossWeight !== '') ? parseFloat(loan.GrossWeight) : 0;
+          const effectiveGross = storedGross > 0 ? storedGross : (pledgedGross > 0 ? pledgedGross : '');
+          if (grossEl) {
+            grossEl.value = effectiveGross !== '' ? parseFloat(Number(effectiveGross).toFixed(3)) : '';
+            if (storedGross > 0 && Math.abs(storedGross - pledgedGross) > 0.001) {
+              grossEl.dataset.manual = 'true';
+            } else {
+              delete grossEl.dataset.manual;
+            }
+          }
+
+          const storedNet = (loan.NetWeight !== undefined && loan.NetWeight !== null && loan.NetWeight !== '') ? parseFloat(loan.NetWeight) : 0;
+          const effectiveNet = storedNet > 0 ? storedNet : (pledgedNet > 0 ? pledgedNet : '');
+          if (netEl) {
+            netEl.value = effectiveNet !== '' ? parseFloat(Number(effectiveNet).toFixed(3)) : '';
+            if (storedNet > 0 && Math.abs(storedNet - pledgedNet) > 0.001) {
+              netEl.dataset.manual = 'true';
+            } else {
+              delete netEl.dataset.manual;
+            }
+          }
+
+          document.getElementById('loanProcessingFee').value = (loan.ProcessingFee !== undefined && loan.ProcessingFee !== null && loan.ProcessingFee !== '') ? loan.ProcessingFee : '';
+          document.getElementById('loanDocumentCharge').value = (loan.DocumentCharge !== undefined && loan.DocumentCharge !== null && loan.DocumentCharge !== '') ? loan.DocumentCharge : '';
+          document.getElementById('loanInsuranceCharge').value = (loan.InsuranceCharge !== undefined && loan.InsuranceCharge !== null && loan.InsuranceCharge !== '') ? loan.InsuranceCharge : '';
+          
+          const storedTotalCharges = (loan.TotalCharges !== undefined && loan.TotalCharges !== null && loan.TotalCharges !== '') ? loan.TotalCharges : '';
+          const storedNetDisbursement = (loan.NetDisbursementAmount !== undefined && loan.NetDisbursementAmount !== null && loan.NetDisbursementAmount !== '') ? loan.NetDisbursementAmount : '';
+
+          if (storedTotalCharges !== '' && parseFloat(storedTotalCharges) > 0) {
+            document.getElementById('loanTotalCharges').value = storedTotalCharges;
+          }
+          if (storedNetDisbursement !== '' && parseFloat(storedNetDisbursement) > 0) {
+            document.getElementById('loanNetDisbursementAmount').value = storedNetDisbursement;
+          }
+
+          if (!document.getElementById('loanTotalCharges').value || !document.getElementById('loanNetDisbursementAmount').value) {
+            calculateLoanCharges();
+          }
+
+          document.getElementById('loanRemarks').value = loan.Remarks || '';
 
           if (isClosed || isCancelled) {
             if (alertEl) {
@@ -3861,7 +3902,6 @@
       const grossInput = document.getElementById('loanGrossWeight');
       const netInput = document.getElementById('loanNetWeight');
       if (!grossInput || !netInput) return;
-      if (grossInput.dataset.manual === 'true' && netInput.dataset.manual === 'true') return;
 
       const checked = document.querySelectorAll('#availableOrnamentsForLoan input[type="checkbox"]:checked');
       let totalGross = 0;
@@ -3871,10 +3911,10 @@
         totalNet += parseFloat(cb.getAttribute('data-net')) || 0;
       });
 
-      if (grossInput.dataset.manual !== 'true') {
+      if (grossInput.dataset.manual !== 'true' || !grossInput.value || parseFloat(grossInput.value) === 0) {
         grossInput.value = totalGross > 0 ? parseFloat(totalGross.toFixed(3)) : '';
       }
-      if (netInput.dataset.manual !== 'true') {
+      if (netInput.dataset.manual !== 'true' || !netInput.value || parseFloat(netInput.value) === 0) {
         netInput.value = totalNet > 0 ? parseFloat(totalNet.toFixed(3)) : '';
       }
     }

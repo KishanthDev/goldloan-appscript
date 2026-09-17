@@ -809,7 +809,10 @@ function addLoan(loanData) {
         const allOrns = getSheetData("Ornaments");
         const selectedOrns = allOrns.filter(o => loanData.ornamentIds.map(String).includes(String(o.OrnamentId)));
         if (!grossWeight) grossWeight = selectedOrns.reduce((s, o) => s + (parseFloat(o.GrossWeight) || 0), 0);
-        if (!netWeight) netWeight = selectedOrns.reduce((s, o) => s + (parseFloat(o.NetWeight) || 0), 0);
+        if (!netWeight) netWeight = selectedOrns.reduce((s, o) => {
+          const nw = (o.MetalWeight !== undefined && o.MetalWeight !== "" && o.MetalWeight !== null) ? o.MetalWeight : (o.NetWeight || 0);
+          return s + (parseFloat(nw) || 0);
+        }, 0);
       } catch (err) {
         console.error("Error calculating ornament weights:", err);
       }
@@ -876,7 +879,8 @@ function getLoans(userId, status) {
         if (orn) {
           const curr = loanWeightMap.get(String(m.LoanId)) || { gross: 0, net: 0 };
           curr.gross += (parseFloat(orn.GrossWeight) || 0);
-          curr.net += (parseFloat(orn.NetWeight) || 0);
+          const nw = (orn.MetalWeight !== undefined && orn.MetalWeight !== "" && orn.MetalWeight !== null) ? orn.MetalWeight : (orn.NetWeight || 0);
+          curr.net += (parseFloat(nw) || 0);
           loanWeightMap.set(String(m.LoanId), curr);
         }
         const ornList = loanOrnMap.get(String(m.LoanId)) || [];
@@ -889,12 +893,12 @@ function getLoans(userId, status) {
 
     loans = loans.map(l => {
       const computed = loanWeightMap.get(String(l.LoanId)) || { gross: 0, net: 0 };
-      const gross = (l.GrossWeight !== undefined && l.GrossWeight !== null && l.GrossWeight !== "")
+      const gross = (l.GrossWeight !== undefined && l.GrossWeight !== null && l.GrossWeight !== "" && parseFloat(l.GrossWeight) > 0)
         ? l.GrossWeight
-        : (computed.gross > 0 ? computed.gross : "");
-      const net = (l.NetWeight !== undefined && l.NetWeight !== null && l.NetWeight !== "")
+        : (computed.gross > 0 ? parseFloat(computed.gross.toFixed(3)) : "");
+      const net = (l.NetWeight !== undefined && l.NetWeight !== null && l.NetWeight !== "" && parseFloat(l.NetWeight) > 0)
         ? l.NetWeight
-        : (computed.net > 0 ? computed.net : "");
+        : (computed.net > 0 ? parseFloat(computed.net.toFixed(3)) : "");
 
       return {
         ...l,
@@ -1018,6 +1022,22 @@ function updateLoan(loanId, loanData) {
       });
     }
 
+    let grossWeight = loanData.GrossWeight !== undefined && loanData.GrossWeight !== "" ? (parseFloat(loanData.GrossWeight) || 0) : (existingLoan.GrossWeight !== undefined ? (parseFloat(existingLoan.GrossWeight) || 0) : 0);
+    let netWeight = loanData.NetWeight !== undefined && loanData.NetWeight !== "" ? (parseFloat(loanData.NetWeight) || 0) : (existingLoan.NetWeight !== undefined ? (parseFloat(existingLoan.NetWeight) || 0) : 0);
+    if ((!grossWeight || !netWeight) && loanData.ornamentIds && loanData.ornamentIds.length > 0) {
+      try {
+        const allOrns = getSheetData("Ornaments");
+        const selectedOrns = allOrns.filter(o => loanData.ornamentIds.map(String).includes(String(o.OrnamentId)));
+        if (!grossWeight) grossWeight = selectedOrns.reduce((s, o) => s + (parseFloat(o.GrossWeight) || 0), 0);
+        if (!netWeight) netWeight = selectedOrns.reduce((s, o) => {
+          const nw = (o.MetalWeight !== undefined && o.MetalWeight !== "" && o.MetalWeight !== null) ? o.MetalWeight : (o.NetWeight || 0);
+          return s + (parseFloat(nw) || 0);
+        }, 0);
+      } catch (err) {
+        console.error("Error calculating ornament weights in updateLoan:", err);
+      }
+    }
+
     // Update Loan Record
     const updateRecord = {
       LoanNumber: loanData.LoanNumber || existingLoan.LoanNumber,
@@ -1029,8 +1049,8 @@ function updateLoan(loanId, loanData) {
       InterestRate: parseFloat(loanData.InterestRate) || 0,
       InterestType: loanData.InterestType || "Simple",
       LoanPeriod: loanData.LoanPeriod || "",
-      GrossWeight: loanData.GrossWeight !== undefined && loanData.GrossWeight !== "" ? (parseFloat(loanData.GrossWeight) || 0) : (existingLoan.GrossWeight !== undefined ? existingLoan.GrossWeight : ""),
-      NetWeight: loanData.NetWeight !== undefined && loanData.NetWeight !== "" ? (parseFloat(loanData.NetWeight) || 0) : (existingLoan.NetWeight !== undefined ? existingLoan.NetWeight : ""),
+      GrossWeight: grossWeight > 0 ? parseFloat(grossWeight.toFixed(3)) : (existingLoan.GrossWeight || ""),
+      NetWeight: netWeight > 0 ? parseFloat(netWeight.toFixed(3)) : (existingLoan.NetWeight || ""),
       ProcessingFee: parseFloat(loanData.ProcessingFee) || 0,
       DocumentCharge: parseFloat(loanData.DocumentCharge) || 0,
       InsuranceCharge: parseFloat(loanData.InsuranceCharge) || 0,
@@ -1074,6 +1094,19 @@ function getLoanDetails(loanId) {
       const orn = allOrnaments.find(o => String(o.OrnamentId) === String(m.OrnamentId));
       return { ...m, ...orn };
     });
+
+    const pledgedGross = ornaments.reduce((sum, o) => sum + (parseFloat(o.GrossWeight) || 0), 0);
+    const pledgedNet = ornaments.reduce((sum, o) => {
+      const nw = (o.MetalWeight !== undefined && o.MetalWeight !== "" && o.MetalWeight !== null) ? o.MetalWeight : (o.NetWeight || 0);
+      return sum + (parseFloat(nw) || 0);
+    }, 0);
+
+    if (loan.GrossWeight === undefined || loan.GrossWeight === null || loan.GrossWeight === "" || parseFloat(loan.GrossWeight) === 0) {
+      if (pledgedGross > 0) loan.GrossWeight = parseFloat(pledgedGross.toFixed(3));
+    }
+    if (loan.NetWeight === undefined || loan.NetWeight === null || loan.NetWeight === "" || parseFloat(loan.NetWeight) === 0) {
+      if (pledgedNet > 0) loan.NetWeight = parseFloat(pledgedNet.toFixed(3));
+    }
 
     const payments = getSheetData("Payments").filter(p => String(p.LoanId) === String(loanId));
     const releases = getSheetData("Releases").filter(r => String(r.LoanId) === String(loanId));
