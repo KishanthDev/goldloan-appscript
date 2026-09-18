@@ -206,24 +206,29 @@ function logoutAdmin(token) {
  * Helper to extract caller role and username from either a session token or direct params.
  */
 function resolveCaller(tokenOrRole, maybeUsername) {
-  if (tokenOrRole && typeof tokenOrRole === "string" && tokenOrRole.length > 20) {
-    const session = validateSessionToken(tokenOrRole);
-    if (session) {
-      return { role: session.role || "", username: session.username || "" };
+  if (tokenOrRole && typeof tokenOrRole === "string") {
+    if (tokenOrRole.length > 20) {
+      const session = validateSessionToken(tokenOrRole);
+      if (session) {
+        return { role: session.role || "", username: session.username || "" };
+      }
+    }
+    if (tokenOrRole === "SuperAdmin" || tokenOrRole === "User") {
+      return { role: tokenOrRole, username: maybeUsername || "" };
     }
   }
-  return { role: tokenOrRole || "", username: maybeUsername || "" };
+  return { role: "", username: maybeUsername || (typeof tokenOrRole === "string" ? tokenOrRole : "") };
 }
 
 /**
- * Returns all admin login users. SuperAdmin only.
- * Passwords are stripped before returning.
+ * Returns all admin login users.
+ * Passwords are stripped before returning. Accessible to any authenticated user.
  */
 function getAdminUsers(tokenOrRole) {
   try {
     const caller = resolveCaller(tokenOrRole);
-    if (caller.role !== "SuperAdmin") {
-      return { success: false, error: "Access denied. SuperAdmin only." };
+    if (!caller.username && !caller.role) {
+      return { success: false, error: "Authentication required." };
     }
     const admins = getSheetData("Admins")
       .filter(a => a.Status !== "Deleted")
@@ -284,33 +289,95 @@ function addAdminUser(userData, tokenOrRole) {
 }
 
 /**
- * Updates an existing admin user (status, role, or password reset). SuperAdmin only.
- * Cannot change own role to non-SuperAdmin.
+ * Updates an existing admin user (status, role, or password reset).
+ * SuperAdmin can update role, status, and reset passwords for any user.
+ * Non-SuperAdmin (User role) can ONLY update their own password.
  */
 function updateAdminUser(adminId, updateData, callerUsername, tokenOrRole) {
   try {
-    const caller = resolveCaller(tokenOrRole, callerUsername);
-    if (caller.role !== "SuperAdmin") {
-      return { success: false, error: "Access denied. SuperAdmin only." };
+    let caller = resolveCaller(tokenOrRole, callerUsername);
+    if (!caller.username && callerUsername) caller.username = callerUsername;
+    if (!caller.role && caller.username) {
+      const allAdmins = getSheetData("Admins");
+      const callerRecord = allAdmins.find(a => String(a.Username).toLowerCase() === String(caller.username).toLowerCase());
+      if (callerRecord) caller.role = callerRecord.Role;
     }
+
     const admins = getSheetData("Admins");
-    const target = admins.find(a => String(a.AdminId) === String(adminId));
+    const target = admins.find(a => String(a.AdminId) === String(adminId) && a.Status !== "Deleted");
     if (!target) return { success: false, error: "Admin user not found." };
 
+    const isSuper = caller.role === "SuperAdmin";
+    const isSelf = caller.username && String(target.Username).toLowerCase() === String(caller.username).toLowerCase();
+
+    // Only SuperAdmin or the user themselves can perform updates
+    if (!isSuper && !isSelf) {
+      return { success: false, error: "Access denied. You can only update your own password." };
+    }
+
+    // Non-SuperAdmin cannot change role or status
+    if (!isSuper && (updateData.role || updateData.status)) {
+      return { success: false, error: "Access denied. Only SuperAdmin can change role or status." };
+    }
+
     // Prevent SuperAdmin from stripping their own SuperAdmin role
-    if (String(target.Username) === String(caller.username) && updateData.role && updateData.role !== "SuperAdmin") {
+    if (isSelf && isSuper && updateData.role && updateData.role !== "SuperAdmin") {
       return { success: false, error: "You cannot change your own role." };
     }
 
     const changes = {};
-    if (updateData.role) changes.Role = updateData.role === "SuperAdmin" ? "SuperAdmin" : "User";
-    if (updateData.status) changes.Status = updateData.status;
-    if (updateData.password && String(updateData.password).trim()) {
-      changes.Password = hashValue(String(updateData.password).trim());
+    if (isSuper && updateData.role) changes.Role = updateData.role === "SuperAdmin" ? "SuperAdmin" : "User";
+    if (isSuper && updateData.status) changes.Status = updateData.status;
+
+    const newPass = updateData.password || updateData.newPassword;
+    if (newPass && String(newPass).trim()) {
+      changes.Password = hashValue(String(newPass).trim());
     }
 
     updateRow("Admins", "AdminId", adminId, changes);
     return { success: true, data: "Admin user updated." };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Changes password for the currently authenticated user.
+ * Can be called from Profile Modal or REST API.
+ */
+function changePassword(newPassword, oldPassword, tokenOrUsername) {
+  try {
+    let caller = resolveCaller(tokenOrUsername);
+    if (!caller.username && tokenOrUsername && typeof tokenOrUsername === "string") {
+      caller.username = tokenOrUsername;
+    }
+    if (!caller.username) {
+      return { success: false, error: "Authentication required to change password." };
+    }
+    const trimmedNew = String(newPassword || "").trim();
+    if (!trimmedNew || trimmedNew.length < 4) {
+      return { success: false, error: "New password must be at least 4 characters long." };
+    }
+
+    const admins = getSheetData("Admins");
+    const target = admins.find(
+      a => String(a.Username).toLowerCase() === String(caller.username).toLowerCase() && a.Status !== "Deleted"
+    );
+    if (!target) {
+      return { success: false, error: "User account not found." };
+    }
+
+    // If current/old password is provided, verify it
+    if (oldPassword && String(oldPassword).trim()) {
+      const hashedOld = hashValue(String(oldPassword).trim());
+      if (hashedOld !== String(target.Password)) {
+        return { success: false, error: "Current password does not match." };
+      }
+    }
+
+    const newHashed = hashValue(trimmedNew);
+    updateRow("Admins", "AdminId", target.AdminId, { Password: newHashed });
+    return { success: true, data: "Password changed successfully." };
   } catch (e) {
     return { success: false, error: e.message };
   }
@@ -417,15 +484,18 @@ function handleApiRequest(action, payload) {
       }
     }
 
-    // ── Role-based write guard: "User" role can only read, not write/delete/create ──
-    const READ_ONLY_ACTIONS = [
+    // ── Role-based write guard: "User" role can read, view staff directory, and change their own password ──
+    const USER_ALLOWED_ACTIONS = [
       "ping", "testConnection", "login", "authenticateAdmin", "logout",
       "getInitialSyncData", "getSyncData", "getDashboardData", "getGoldRates",
       "getUsers", "getBankAccounts", "getOrnaments", "getAvailableOrnaments",
       "getLoans", "getLoanDetails", "getActiveLoansForClosure",
-      "getPayments"
+      "getPayments",
+      "getAdminUsers",
+      "changePassword",
+      "updateAdminUser"
     ];
-    if (session && session.role !== "SuperAdmin" && !READ_ONLY_ACTIONS.includes(action)) {
+    if (session && session.role !== "SuperAdmin" && !USER_ALLOWED_ACTIONS.includes(action)) {
       return jsonResponse({
         success: false,
         error: "Access denied. You have view-only access. Contact your SuperAdmin to make changes.",
@@ -450,7 +520,15 @@ function handleApiRequest(action, payload) {
       case "logout":
         return jsonResponse(logoutAdmin(payload.token));
 
-      // ── Admin User Management (SuperAdmin only) ──
+      // ── Change Password (for current logged-in user) ──
+      case "changePassword":
+        return jsonResponse(changePassword(
+          payload.newPassword || payload.password,
+          payload.oldPassword || payload.currentPassword,
+          payload.token || callerUsername
+        ));
+
+      // ── Admin User Management ──
       case "getAdminUsers":
         return jsonResponse(getAdminUsers(payload.token || callerRole));
 
