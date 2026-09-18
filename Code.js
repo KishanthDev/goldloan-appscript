@@ -31,8 +31,8 @@ function setupSheets() {
 
         // NEW: Seed default admin credentials if setting up for the first time
         if (name === "Admins") {
-          // Default Username: admin, Password: password123
-          sheet.appendRow(["ADM001", "admin", "password123", "SuperAdmin", "Active"]);
+          // Default Username: admin, Password: password123 (stored as SHA-256 hash)
+          sheet.appendRow(["ADM001", "admin", hashValue("password123"), "SuperAdmin", "Active"]);
         }
       } else {
         const firstRow = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
@@ -98,19 +98,132 @@ function setupSheets() {
   }
 }
 
+// ─── SECURITY UTILITIES ───
+
+/**
+ * Computes a SHA-256 hex digest of a string value.
+ * Used for password hashing (one-way) and session token generation.
+ */
+function hashValue(value) {
+  const bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    String(value),
+    Utilities.Charset.UTF_8
+  );
+  return bytes.map(b => ('0' + (b & 0xFF).toString(16)).slice(-2)).join('');
+}
+
+/**
+ * Brute-force protection: allows max 5 login attempts per username per 15 minutes.
+ * Throws an error string if the rate limit is exceeded.
+ */
+function checkLoginRateLimit(username) {
+  const key = 'LOGIN_ATTEMPTS_' + String(username).toLowerCase();
+  const props = PropertiesService.getScriptProperties();
+  const raw = props.getProperty(key);
+  let data = raw ? JSON.parse(raw) : { count: 0, firstAttempt: Date.now() };
+
+  const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+  const MAX_ATTEMPTS = 5;
+
+  // Reset window if it has expired
+  if (Date.now() - data.firstAttempt > WINDOW_MS) {
+    data = { count: 0, firstAttempt: Date.now() };
+  }
+
+  data.count++;
+  props.setProperty(key, JSON.stringify(data));
+
+  if (data.count > MAX_ATTEMPTS) {
+    const waitMins = Math.ceil((WINDOW_MS - (Date.now() - data.firstAttempt)) / 60000);
+    throw new Error('Too many failed login attempts. Please try again in ' + waitMins + ' minute(s).');
+  }
+}
+
+/**
+ * Clears the login attempt counter for a username after a successful login.
+ */
+function resetLoginRateLimit(username) {
+  try {
+    PropertiesService.getScriptProperties()
+      .deleteProperty('LOGIN_ATTEMPTS_' + String(username).toLowerCase());
+  } catch (e) { /* ignore */ }
+}
+
+/**
+ * Generates a secure session token, stores it in PropertiesService with an 8-hour TTL.
+ * Returns the token string.
+ */
+function createSessionToken(username, role) {
+  const raw = username + ':' + Date.now() + ':' + Math.random();
+  const token = hashValue(raw);
+  const expiry = Date.now() + (8 * 60 * 60 * 1000); // 8 hours
+
+  PropertiesService.getScriptProperties()
+    .setProperty('SESSION_' + token, JSON.stringify({ username, role, expiry }));
+
+  return token;
+}
+
+/**
+ * Validates a session token. Returns the session object { username, role } if valid,
+ * or null if missing, expired, or invalid.
+ */
+function validateSessionToken(token) {
+  if (!token) return null;
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const raw = props.getProperty('SESSION_' + token);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    if (Date.now() > session.expiry) {
+      props.deleteProperty('SESSION_' + token);
+      return null;
+    }
+    return session;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Invalidates a session token on the server side (secure logout).
+ */
+function logoutAdmin(token) {
+  try {
+    if (token) {
+      PropertiesService.getScriptProperties().deleteProperty('SESSION_' + token);
+    }
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
 // ─── AUTHENTICATION ───
 
 function authenticateAdmin(username, password) {
   try {
+    // Rate limiting: blocks brute force after 5 failed attempts in 15 minutes
+    checkLoginRateLimit(username);
+
     const admins = getSheetData("Admins").filter(a => a.Status === "Active");
-    const admin = admins.find(a => String(a.Username) === String(username) && String(a.Password) === String(password));
+    const hashedInput = hashValue(String(password));
+    const admin = admins.find(a =>
+      String(a.Username) === String(username) &&
+      String(a.Password) === hashedInput
+    );
 
     if (admin) {
-      return { success: true, data: { username: admin.Username, role: admin.Role } };
+      // Successful login: clear rate limit counter and issue a session token
+      resetLoginRateLimit(username);
+      const token = createSessionToken(admin.Username, admin.Role);
+      return { success: true, data: { username: admin.Username, role: admin.Role, token } };
     } else {
       return { success: false, error: "Invalid username or password." };
     }
   } catch (e) {
+    // Surface rate limit errors and other failures to the client
     return { success: false, error: e.message };
   }
 }
@@ -151,10 +264,32 @@ function doPost(e) {
 
 function handleApiRequest(action, payload) {
   try {
+    // ── REST token guard: all actions except login/ping require a valid session token ──
+    const PUBLIC_ACTIONS = ["ping", "testConnection", "login", "authenticateAdmin"];
+    if (!PUBLIC_ACTIONS.includes(action)) {
+      const session = validateSessionToken(payload.token);
+      if (!session) {
+        return jsonResponse({
+          success: false,
+          error: "Unauthorized. Session expired or invalid. Please log in again.",
+          code: 401
+        });
+      }
+    }
+
     switch (action) {
       case "ping":
       case "testConnection":
         return jsonResponse({ success: true, data: "PONG", timestamp: new Date().toISOString() });
+
+      // ── Login — accepts {"action":"login","username":"...","password":"..."} ──
+      case "login":
+      case "authenticateAdmin":
+        return jsonResponse(authenticateAdmin(payload.username, payload.password));
+
+      // ── Logout — {"action":"logout","token":"..."} ──
+      case "logout":
+        return jsonResponse(logoutAdmin(payload.token));
 
       case "getInitialSyncData":
       case "getSyncData":
@@ -231,9 +366,6 @@ function handleApiRequest(action, payload) {
 
       case "addPayment":
         return jsonResponse(addPayment(payload.paymentData || payload));
-
-      case "authenticateAdmin":
-        return jsonResponse(authenticateAdmin(payload.username, payload.password));
 
       default:
         return jsonResponse({ success: false, error: "Unknown action: " + action });
@@ -543,7 +675,9 @@ function processDriveFiles(files, folderName) {
     for (const file of files) {
       const blob = Utilities.newBlob(Utilities.base64Decode(file.base64), file.mimeType, file.name);
       const uploadedFile = folder.createFile(blob);
-      uploadedFile.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+      // Restrict to domain only — not publicly accessible to the whole internet.
+      // Change to DriveApp.Access.ANYONE_WITH_LINK if you need public image previews.
+      uploadedFile.setSharing(DriveApp.Access.DOMAIN_WITH_LINK, DriveApp.Permission.VIEW);
       imageUrls.push(uploadedFile.getUrl());
     }
   }
@@ -1651,4 +1785,57 @@ function testGoldRates() {
   const result = getGoldRates(true);
   console.log("Result:", JSON.stringify(result, null, 2));
   return result;
+}
+
+// ─── ONE-TIME SECURITY MIGRATION ───
+
+/**
+ * IMPORTANT: Run this function ONCE from the Apps Script IDE after deploying
+ * this security update. It hashes all existing plaintext passwords in the
+ * Admins sheet so that existing admins can still log in.
+ *
+ * Safe to run multiple times — it detects already-hashed passwords (64-char hex)
+ * and skips them.
+ */
+function migrateAdminPasswordsToHashed() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName("Admins");
+  if (!sheet) {
+    console.error("Admins sheet not found.");
+    return;
+  }
+
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    console.log("No admin records to migrate.");
+    return;
+  }
+
+  const headers = data[0];
+  const passwordCol = headers.indexOf("Password");
+  if (passwordCol === -1) {
+    console.error("Password column not found in Admins sheet.");
+    return;
+  }
+
+  let migrated = 0;
+  let skipped = 0;
+
+  for (let i = 1; i < data.length; i++) {
+    const currentPassword = String(data[i][passwordCol]);
+    // A SHA-256 hash is exactly 64 lowercase hex characters — skip if already hashed
+    const isAlreadyHashed = /^[0-9a-f]{64}$/.test(currentPassword);
+
+    if (isAlreadyHashed) {
+      skipped++;
+      console.log(`Row ${i + 1}: Already hashed — skipped.`);
+    } else {
+      const hashed = hashValue(currentPassword);
+      sheet.getRange(i + 1, passwordCol + 1).setValue(hashed);
+      migrated++;
+      console.log(`Row ${i + 1}: Password migrated to hash.`);
+    }
+  }
+
+  console.log(`Migration complete. Migrated: ${migrated}, Skipped (already hashed): ${skipped}`);
 }

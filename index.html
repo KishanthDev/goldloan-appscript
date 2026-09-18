@@ -1750,7 +1750,9 @@
       google.script.run
         .withSuccessHandler(res => {
           if (res.success) {
+            // Store username and server-issued session token
             sessionStorage.setItem('goldLoanAdmin', res.data.username);
+            sessionStorage.setItem('goldLoanToken', res.data.token || '');
             const loginScreen = document.getElementById('view-login');
             loginScreen.classList.add('opacity-0');
 
@@ -1766,6 +1768,7 @@
             }, 300);
 
           } else {
+            // Surfaces rate limit errors ("Too many failed attempts...") and credential errors
             errDiv.textContent = res.error || "Invalid username or password.";
             errDiv.classList.remove('hidden');
             loginBtn.disabled = false;
@@ -1781,7 +1784,14 @@
     }
 
     function handleLogout() {
+      // Invalidate the session token on the server before clearing it locally
+      const token = sessionStorage.getItem('goldLoanToken');
+      if (token) {
+        google.script.run.logoutAdmin(token);
+      }
+
       sessionStorage.removeItem('goldLoanAdmin');
+      sessionStorage.removeItem('goldLoanToken');
       const loginScreen = document.getElementById('view-login');
       loginScreen.classList.remove('hidden', 'opacity-0');
       
