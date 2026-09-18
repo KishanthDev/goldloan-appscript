@@ -200,6 +200,145 @@ function logoutAdmin(token) {
   }
 }
 
+// ─── ADMIN USER MANAGEMENT ───
+
+/**
+ * Helper to extract caller role and username from either a session token or direct params.
+ */
+function resolveCaller(tokenOrRole, maybeUsername) {
+  if (tokenOrRole && typeof tokenOrRole === "string" && tokenOrRole.length > 20) {
+    const session = validateSessionToken(tokenOrRole);
+    if (session) {
+      return { role: session.role || "", username: session.username || "" };
+    }
+  }
+  return { role: tokenOrRole || "", username: maybeUsername || "" };
+}
+
+/**
+ * Returns all admin login users. SuperAdmin only.
+ * Passwords are stripped before returning.
+ */
+function getAdminUsers(tokenOrRole) {
+  try {
+    const caller = resolveCaller(tokenOrRole);
+    if (caller.role !== "SuperAdmin") {
+      return { success: false, error: "Access denied. SuperAdmin only." };
+    }
+    const admins = getSheetData("Admins")
+      .filter(a => a.Status !== "Deleted")
+      .map(a => ({
+        AdminId: a.AdminId,
+        Username: a.Username,
+        Role: a.Role,
+        Status: a.Status
+      }));
+    return { success: true, data: admins };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Creates a new admin login user with "User" role by default.
+ * SuperAdmin can also create another SuperAdmin if requested.
+ * Validates uniqueness and hashes the password.
+ */
+function addAdminUser(userData, tokenOrRole) {
+  try {
+    const caller = resolveCaller(tokenOrRole);
+    if (caller.role !== "SuperAdmin") {
+      return { success: false, error: "Access denied. SuperAdmin only." };
+    }
+    if (!userData || !userData.username || !userData.password) {
+      return { success: false, error: "Username and password are required." };
+    }
+
+    const trimmedUsername = String(userData.username).trim();
+    if (!trimmedUsername) {
+      return { success: false, error: "Username cannot be empty." };
+    }
+
+    const existing = getSheetData("Admins").find(
+      a => String(a.Username).toLowerCase() === trimmedUsername.toLowerCase() && a.Status !== "Deleted"
+    );
+    if (existing) {
+      return { success: false, error: "Username already exists." };
+    }
+
+    const adminId = generateId("ADM", "Admins", "AdminId");
+    // DEFAULT ROLE IS "User" (read-only view access), unless explicitly requested as SuperAdmin
+    const role = (userData.role === "SuperAdmin") ? "SuperAdmin" : "User";
+    const record = {
+      AdminId: adminId,
+      Username: trimmedUsername,
+      Password: hashValue(String(userData.password)),
+      Role: role,
+      Status: userData.status || "Active"
+    };
+    appendRow("Admins", record);
+    return { success: true, data: { AdminId: adminId, Username: record.Username, Role: record.Role, Status: record.Status } };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Updates an existing admin user (status, role, or password reset). SuperAdmin only.
+ * Cannot change own role to non-SuperAdmin.
+ */
+function updateAdminUser(adminId, updateData, callerUsername, tokenOrRole) {
+  try {
+    const caller = resolveCaller(tokenOrRole, callerUsername);
+    if (caller.role !== "SuperAdmin") {
+      return { success: false, error: "Access denied. SuperAdmin only." };
+    }
+    const admins = getSheetData("Admins");
+    const target = admins.find(a => String(a.AdminId) === String(adminId));
+    if (!target) return { success: false, error: "Admin user not found." };
+
+    // Prevent SuperAdmin from stripping their own SuperAdmin role
+    if (String(target.Username) === String(caller.username) && updateData.role && updateData.role !== "SuperAdmin") {
+      return { success: false, error: "You cannot change your own role." };
+    }
+
+    const changes = {};
+    if (updateData.role) changes.Role = updateData.role === "SuperAdmin" ? "SuperAdmin" : "User";
+    if (updateData.status) changes.Status = updateData.status;
+    if (updateData.password && String(updateData.password).trim()) {
+      changes.Password = hashValue(String(updateData.password).trim());
+    }
+
+    updateRow("Admins", "AdminId", adminId, changes);
+    return { success: true, data: "Admin user updated." };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
+/**
+ * Soft-deletes an admin login user (sets Status = "Deleted"). SuperAdmin only.
+ * Cannot delete yourself.
+ */
+function deleteAdminLoginUser(adminId, callerUsername, tokenOrRole) {
+  try {
+    const caller = resolveCaller(tokenOrRole, callerUsername);
+    if (caller.role !== "SuperAdmin") {
+      return { success: false, error: "Access denied. SuperAdmin only." };
+    }
+    const admins = getSheetData("Admins");
+    const target = admins.find(a => String(a.AdminId) === String(adminId));
+    if (!target) return { success: false, error: "Admin user not found." };
+    if (String(target.Username) === String(caller.username)) {
+      return { success: false, error: "You cannot delete your own account." };
+    }
+    updateRow("Admins", "AdminId", adminId, { Status: "Deleted" });
+    return { success: true, data: "Admin user deleted." };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+}
+
 // ─── AUTHENTICATION ───
 
 function authenticateAdmin(username, password) {
@@ -266,8 +405,9 @@ function handleApiRequest(action, payload) {
   try {
     // ── REST token guard: all actions except login/ping require a valid session token ──
     const PUBLIC_ACTIONS = ["ping", "testConnection", "login", "authenticateAdmin"];
+    let session = null;
     if (!PUBLIC_ACTIONS.includes(action)) {
-      const session = validateSessionToken(payload.token);
+      session = validateSessionToken(payload.token);
       if (!session) {
         return jsonResponse({
           success: false,
@@ -276,6 +416,25 @@ function handleApiRequest(action, payload) {
         });
       }
     }
+
+    // ── Role-based write guard: "User" role can only read, not write/delete/create ──
+    const READ_ONLY_ACTIONS = [
+      "ping", "testConnection", "login", "authenticateAdmin", "logout",
+      "getInitialSyncData", "getSyncData", "getDashboardData", "getGoldRates",
+      "getUsers", "getBankAccounts", "getOrnaments", "getAvailableOrnaments",
+      "getLoans", "getLoanDetails", "getActiveLoansForClosure",
+      "getPayments"
+    ];
+    if (session && session.role !== "SuperAdmin" && !READ_ONLY_ACTIONS.includes(action)) {
+      return jsonResponse({
+        success: false,
+        error: "Access denied. You have view-only access. Contact your SuperAdmin to make changes.",
+        code: 403
+      });
+    }
+
+    const callerUsername = session ? session.username : "";
+    const callerRole = session ? session.role : "";
 
     switch (action) {
       case "ping":
@@ -290,6 +449,28 @@ function handleApiRequest(action, payload) {
       // ── Logout — {"action":"logout","token":"..."} ──
       case "logout":
         return jsonResponse(logoutAdmin(payload.token));
+
+      // ── Admin User Management (SuperAdmin only) ──
+      case "getAdminUsers":
+        return jsonResponse(getAdminUsers(payload.token || callerRole));
+
+      case "addAdminUser":
+        return jsonResponse(addAdminUser(payload.userData || payload, payload.token || callerRole));
+
+      case "updateAdminUser":
+        return jsonResponse(updateAdminUser(
+          payload.adminId || payload.AdminId,
+          payload.updateData || payload,
+          callerUsername,
+          payload.token || callerRole
+        ));
+
+      case "deleteAdminLoginUser":
+        return jsonResponse(deleteAdminLoginUser(
+          payload.adminId || payload.AdminId,
+          callerUsername,
+          payload.token || callerRole
+        ));
 
       case "getInitialSyncData":
       case "getSyncData":
@@ -374,6 +555,7 @@ function handleApiRequest(action, payload) {
     return jsonResponse({ success: false, error: e.message });
   }
 }
+
 
 function jsonResponse(obj) {
   return ContentService.createTextOutput(JSON.stringify(obj))
